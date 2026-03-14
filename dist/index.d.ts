@@ -180,6 +180,112 @@ interface Suppression {
     reason: string;
     createdAt: string;
 }
+interface ForgotPasswordOptions {
+    email: string;
+}
+interface ResetPasswordOptions {
+    token: string;
+    password: string;
+}
+interface AuthMessageResponse {
+    message: string;
+}
+interface CreateSenderOptions {
+    /** Username part of the sender address (e.g. "noreply") */
+    username: string;
+    /** Display name (e.g. "No Reply") */
+    displayName: string;
+}
+interface Sender {
+    id: string;
+    domainId: string;
+    username: string;
+    displayName: string;
+    email: string;
+    createdAt: string;
+    updatedAt: string;
+}
+interface SenderWithDomain extends Sender {
+    domain: {
+        name: string;
+        provider: 'AWS_SES' | 'AZURE_CS';
+    };
+}
+interface WarmupOptions {
+    /** Days to stay in each warmup stage (1–7) */
+    daysPerStage?: number;
+    /** Custom daily send limits per stage (2–20 stages) */
+    customLimits?: number[];
+}
+interface WarmupStage {
+    stage: number;
+    dailyLimit: number;
+    active: boolean;
+}
+interface WarmupStatus {
+    enabled: boolean;
+    completed: boolean;
+    currentStage: number;
+    totalStages: number;
+    dailySentToday: number;
+    dailyLimit: number | null;
+    stageTotalSent: number;
+    daysInStage: number;
+    daysPerStage: number;
+    customLimits: number[];
+    startedAt: string | null;
+    completedAt: string | null;
+    stages: WarmupStage[];
+}
+interface WarmupRecord {
+    id: string;
+    domainId: string;
+    enabled: boolean;
+    currentStage: number;
+    dailySentToday: number;
+    daysPerStage: number;
+    customLimits: number[];
+    startedAt: string | null;
+    completedAt: string | null;
+}
+interface DomainConnectUrl {
+    url: string;
+}
+interface RelinkResult {
+    success: boolean;
+    message: string;
+}
+interface WebhookDeliveryLog {
+    id: string;
+    endpointId: string;
+    eventType: string;
+    payload: Record<string, unknown>;
+    statusCode: number | null;
+    response: string | null;
+    success: boolean;
+    attempts: number;
+    createdAt: string;
+}
+interface AnalyticsQuery {
+    /** Number of days to look back (default: 30) */
+    days?: number;
+}
+interface DomainAnalytics {
+    domainId: string;
+    domain: string;
+    sent: number;
+    delivered: number;
+    bounced: number;
+    opens: number;
+}
+interface TagAnalytics {
+    tag: string;
+    sent: number;
+    delivered: number;
+    bounced: number;
+    opens: number;
+    clicks: number;
+}
 interface AnalyticsOverview {
     sent: number;
     delivered: number;
@@ -206,8 +312,10 @@ declare class RebelSender {
     private readonly timeout;
     private readonly retries;
     /** Resource namespaces */
+    readonly auth: Auth;
     readonly emails: Emails;
     readonly domains: Domains;
+    readonly senders: Senders;
     readonly apiKeys: ApiKeys;
     readonly webhooks: Webhooks;
     readonly templates: Templates;
@@ -224,6 +332,14 @@ declare class RebelSender {
     send(options: SendEmailOptions): Promise<SendEmailResponse>;
     /** @internal */
     _request<T>(method: string, path: string, body?: unknown, query?: Record<string, unknown>): Promise<T>;
+}
+declare class Auth {
+    private client;
+    constructor(client: RebelSender);
+    /** Request a password reset email. Always returns success to prevent email enumeration. */
+    forgotPassword(options: ForgotPasswordOptions): Promise<AuthMessageResponse>;
+    /** Reset password using a token from the reset email. */
+    resetPassword(options: ResetPasswordOptions): Promise<AuthMessageResponse>;
 }
 declare class Emails {
     private client;
@@ -244,6 +360,32 @@ declare class Domains {
     get(id: string): Promise<Domain>;
     verify(id: string): Promise<Domain>;
     delete(id: string): Promise<void>;
+    listSenders(domainId: string): Promise<Sender[]>;
+    createSender(domainId: string, options: CreateSenderOptions): Promise<Sender>;
+    deleteSender(domainId: string, senderId: string): Promise<void>;
+    getWarmup(domainId: string): Promise<{
+        data: WarmupStatus;
+    }>;
+    startWarmup(domainId: string, options?: WarmupOptions): Promise<{
+        data: WarmupRecord;
+        message: string;
+    }>;
+    updateWarmup(domainId: string, options: WarmupOptions): Promise<{
+        data: WarmupRecord;
+        message: string;
+    }>;
+    stopWarmup(domainId: string): Promise<{
+        message: string;
+    }>;
+    getDomainConnectUrl(domainId: string): Promise<{
+        data: DomainConnectUrl;
+    }>;
+    relink(domainId: string): Promise<RelinkResult>;
+}
+declare class Senders {
+    private client;
+    constructor(client: RebelSender);
+    list(): Promise<SenderWithDomain[]>;
 }
 declare class ApiKeys {
     private client;
@@ -265,6 +407,18 @@ declare class Webhooks {
     }>;
     update(id: string, options: UpdateWebhookOptions): Promise<Webhook>;
     delete(id: string): Promise<void>;
+    getLogs(webhookId: string, query?: {
+        page?: number;
+        limit?: number;
+    }): Promise<{
+        data: WebhookDeliveryLog[];
+        pagination: {
+            page: number;
+            limit: number;
+            total: number;
+            pages: number;
+        };
+    }>;
 }
 declare class Templates {
     private client;
@@ -293,15 +447,15 @@ declare class Suppressions {
 declare class Analytics {
     private client;
     constructor(client: RebelSender);
-    overview(query?: {
-        from?: string;
-        to?: string;
-    }): Promise<AnalyticsOverview>;
-    timeseries(query?: {
-        from?: string;
-        to?: string;
-    }): Promise<{
+    overview(query?: AnalyticsQuery): Promise<AnalyticsOverview>;
+    timeseries(query?: AnalyticsQuery): Promise<{
         data: TimeseriesPoint[];
+    }>;
+    byDomain(query?: AnalyticsQuery): Promise<{
+        data: DomainAnalytics[];
+    }>;
+    byTag(query?: AnalyticsQuery): Promise<{
+        data: TagAnalytics[];
     }>;
 }
 
@@ -325,4 +479,4 @@ declare class NotFoundError extends RebelSenderError {
     constructor(message?: string);
 }
 
-export { type AnalyticsOverview, type ApiKey, AuthenticationError, type BatchSendResponse, type CreateApiKeyOptions, type CreateDomainOptions, type CreateTemplateOptions, type CreateWebhookOptions, type DnsRecord, type Domain, type Email, type EmailDetail, type EmailEvent, type EmailStatus, type ListEmailsOptions, NotFoundError, type PaginatedResponse, RateLimitError, RebelSender, type RebelSenderConfig, RebelSenderError, type SendEmailOptions, type SendEmailResponse, type Suppression, type Template, type TimeseriesPoint, type UpdateTemplateOptions, type UpdateWebhookOptions, ValidationError, type Webhook, type WebhookEvent };
+export { type AnalyticsOverview, type AnalyticsQuery, type ApiKey, type AuthMessageResponse, AuthenticationError, type BatchSendResponse, type CreateApiKeyOptions, type CreateDomainOptions, type CreateSenderOptions, type CreateTemplateOptions, type CreateWebhookOptions, type DnsRecord, type Domain, type DomainAnalytics, type DomainConnectUrl, type Email, type EmailDetail, type EmailEvent, type EmailStatus, type ForgotPasswordOptions, type ListEmailsOptions, NotFoundError, type PaginatedResponse, RateLimitError, RebelSender, type RebelSenderConfig, RebelSenderError, type RelinkResult, type ResetPasswordOptions, type SendEmailOptions, type SendEmailResponse, type Sender, type SenderWithDomain, type Suppression, type TagAnalytics, type Template, type TimeseriesPoint, type UpdateTemplateOptions, type UpdateWebhookOptions, ValidationError, type WarmupOptions, type WarmupRecord, type WarmupStage, type WarmupStatus, type Webhook, type WebhookDeliveryLog, type WebhookEvent };
