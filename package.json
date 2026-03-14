@@ -1,6 +1,6 @@
 {
   "name": "rebelsender",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Official Node.js SDK for RebelSender — high-velocity email for builders",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
